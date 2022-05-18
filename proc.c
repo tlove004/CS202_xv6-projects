@@ -112,6 +112,9 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  // if p is thread, will be set to 1 in clone()
+  p->thread = 0; // (\\cs202) lab2
+
   return p;
 }
 
@@ -260,7 +263,6 @@ exit(void)
         wakeup1(initproc);
     }
   }
-
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
   sched();
@@ -289,8 +291,11 @@ wait(void)
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
-        freevm(p->pgdir);
-        p->pid = 0;
+	// (\\cs202) lab2 only parent can clear the memory, all threads must exit first
+        if (!p->thread)
+	  freevm(p->pgdir);
+        p->thread = 0;
+	p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
@@ -531,4 +536,78 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+// (\\cs202) lab2
+// 1) address space should be the same as the parents (shared)
+// 2) file descriptors should not be duplicated, but the same should be used
+// 3) stack should be allocated prior to calling clone
+
+/*  The stack looks like:  (from Programming from the ground up)
+ *   Param N       	<----- N*4+4(%ebp)
+ *   ...
+ *   Param 2       	<----- 12(%ebp)
+ *   Param 1       	<----- 8(%ebp)
+ *   Return Addr	<----- 4(%ebp)
+ *   Old %ebp		<----- (%ebp)
+ *   Local var 1	<----- -4(%ebp)
+ *   Local var 2	<----- -8(%ebp)
+ *   ...
+ *   Local var M	<----- -M*4(%ebp) and (%esp)
+ *
+ *   Where M is the number of local variables
+ */
+int
+clone(void *stack, int size)
+{
+  int i, pid;
+  struct proc *np;
+  struct proc *curproc = myproc();
+  // for local variable storage on current stack frame
+  // OK to make this larger than needed, but not smaller, otherwise we'll clobber return frame
+  uint shift = 2*sizeof(int) + 2*sizeof(struct proc*) + sizeof(uint);  
+
+  // Allocate process. gets an unused proc from proctable
+  if((np = allocproc()) == 0){
+    return -1;
+  }
+  
+  np->thread = 1;
+  np->parent = curproc;
+
+  np->pgdir = curproc->pgdir;  // same page table as parent's
+  np->sz = curproc->sz; // operating on same address space, same size
+  *np->tf = *curproc->tf;  //copy parent's trapframe
+
+  // Clear %eax so that clone returns 0 in the child.
+  np->tf->eax = 0;
+  
+  // set up child stack:
+  // find size of parent stack + offset for values within local stack boundary
+  // esp is top of new stack, ebp is base -- offset must be accounted for
+  // copy parent stack into user stack including shift offset
+  uint parSize = (uint)(((void*)curproc->tf->ebp - ((void*)curproc->tf->esp)) + shift); // bottom - top of stack frame, include shift to get values beyond stack boundary
+  np->tf->esp = (uint)(stack - parSize); // esp -> top of new stack
+  np->tf->ebp = (uint)(stack - shift);   // ebp -> base of new stack
+  memmove((void*)np->tf->esp, (const void*)curproc->tf->esp, parSize); // copy parent into child
+
+  // use same file descriptors for each open file
+  for(i = 0; i < NOFILE; i++)
+    if(curproc->ofile[i])
+      np->ofile[i] = filedup(curproc->ofile[i]);
+
+  // same working directory
+  np->cwd = idup(curproc->cwd);
+
+
+  // same name
+  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+
+  pid = np->pid;
+
+  acquire(&ptable.lock);
+  np->state = RUNNABLE;
+  release(&ptable.lock);
+
+  return pid;
 }

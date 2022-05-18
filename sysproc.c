@@ -89,3 +89,25 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+// (\\cs202) lab 2
+int
+sys_clone(void)
+{
+  void* stack;
+  int size;
+
+//  cprintf("getting stack\n");
+  if(argint(0, (int*) &stack) < 0) {
+    cprintf("Stack not given\n");
+    return -1;
+  }
+  
+  //cprintf("getting size\n");
+  if(argint(1, (int*) &size) < 0) {
+    cprintf("Size not given\n");
+    return -1;
+  }
+
+  return clone(stack, size);
+}
