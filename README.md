@@ -1,16 +1,18 @@
-### CS202 projects:
-## Project 1:
+## CS202 projects:
+### Project 1:
 Implemented Lottery scheduling and Stride Scheduling
-## Project 2:
+### Project 2:
 Implemented Threads for xv6 using various locking schemes.
 
 See reports for details.
+
+## xv6-public:
 
 xv6 is a re-implementation of Dennis Ritchie's and Ken Thompson's Unix
 Version 6 (v6).  xv6 loosely follows the structure and style of v6,
 but is implemented for a modern x86-based multiprocessor using ANSI C.
 
-ACKNOWLEDGMENTS
+### ACKNOWLEDGMENTS
 
 xv6 is inspired by John Lions's Commentary on UNIX 6th Edition (Peer
 to Peer Communications; ISBN: 1-57398-013-7; 1st edition (June 14,
